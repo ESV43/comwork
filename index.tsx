@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, GenerateContentResponse, Chat, Part } from "@google/genai";
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 // --- TYPES ---
 type AppStep = 'configuration' | 'characters' | 'generation' | 'comic';
@@ -126,7 +128,7 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
                 <IconCog />
                 <h2>Configuration</h2>
             </div>
-
+            
             <div className="form-group full-width" style={{background: 'var(--primary-glow)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '1.5rem'}}>
                 <label htmlFor="apiKey">Gemini API Key</label>
                 <input
@@ -395,9 +397,51 @@ const GenerationStep = ({ progress, panels, config }) => {
 
 const ComicViewStep = ({ panels, config, onRestart }) => {
     const [showDescriptions, setShowDescriptions] = useState(true);
+    const [isDownloading, setIsDownloading] = useState(false);
 
-    const downloadComic = () => {
-        alert('Download functionality coming soon!');
+    const downloadComic = async () => {
+        setIsDownloading(true);
+        const pageElements = document.querySelectorAll('.comic-page-container');
+        if (pageElements.length === 0) {
+            alert("No pages found to download.");
+            setIsDownloading(false);
+            return;
+        }
+
+        const pdf = new jsPDF({
+            orientation: 'p',
+            unit: 'px',
+            format: 'a4',
+        });
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+
+        const pageBackgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--container-bg').trim();
+
+        for (let i = 0; i < pageElements.length; i++) {
+            const pageElement = pageElements[i] as HTMLElement;
+            const canvas = await html2canvas(pageElement, {
+                scale: 2,
+                useCORS: true,
+                backgroundColor: pageBackgroundColor,
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const imgWidth = canvas.width;
+            const imgHeight = canvas.height;
+            const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+
+            const imgX = (pdfWidth - imgWidth * ratio) / 2;
+            const imgY = 0;
+            
+            if (i > 0) {
+                pdf.addPage();
+            }
+            pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+        }
+        
+        pdf.save('ai-comic.pdf');
+        setIsDownloading(false);
     };
     
     const successfulPanels = useMemo(() => panels.filter(p => p.status === 'done' && p.imageUrl).length, [panels]);
@@ -432,45 +476,49 @@ const ComicViewStep = ({ panels, config, onRestart }) => {
                             <span className="slider"></span>
                         </label>
                     </div>
-                    <button className="button button-secondary" onClick={downloadComic}>Download Comic</button>
+                    <button className="button button-secondary" onClick={downloadComic} disabled={isDownloading}>
+                        {isDownloading ? <><IconSpinner/> Generating...</> : 'Download as PDF'}
+                    </button>
                     <button className="button button-primary" onClick={onRestart}>Create New Comic</button>
                 </div>
             </div>
             
-            {Object.keys(pages).sort((a,b) => parseInt(a) - parseInt(b)).map(pageNum => (
-                <React.Fragment key={`page-wrapper-${pageNum}`}>
-                    <h3 className="page-header">Page {pageNum}</h3>
-                    <div className="comic-grid">
-                        {pages[pageNum].map((panel) => (
-                            <div key={panel.id} className="comic-panel">
-                                <div className="panel-image-container" style={{ aspectRatio: config.aspectRatio.replace(':', ' / ') }}>
-                                    {panel.status === 'done' && panel.imageUrl ? (
-                                        <img src={panel.imageUrl} alt={`Page ${panel.page}, Panel ${panel.panel}`} />
-                                    ) : panel.status === 'error' ? (
-                                        <div className="panel-error">
-                                            <IconError />
-                                            <span>Image generation failed.</span>
-                                        </div>
-                                    ) : (
-                                        <div className="panel-image-container">
-                                            <IconSpinner />
-                                            <span>Generating...</span>
+            <div id="comic-download-area">
+                {Object.keys(pages).sort((a,b) => parseInt(a) - parseInt(b)).map(pageNum => (
+                    <div key={`page-container-${pageNum}`} className="comic-page-container">
+                        <h3 className="page-header">Page {pageNum}</h3>
+                        <div className="comic-grid">
+                            {pages[pageNum].map((panel) => (
+                                <div key={panel.id} className="comic-panel">
+                                    <div className="panel-image-container" style={{ aspectRatio: config.aspectRatio.replace(':', ' / ') }}>
+                                        {panel.status === 'done' && panel.imageUrl ? (
+                                            <img src={panel.imageUrl} alt={`Page ${panel.page}, Panel ${panel.panel}`} crossOrigin="anonymous" />
+                                        ) : panel.status === 'error' ? (
+                                            <div className="panel-error">
+                                                <IconError />
+                                                <span>Image generation failed.</span>
+                                            </div>
+                                        ) : (
+                                            <div className="panel-image-container">
+                                                <IconSpinner />
+                                                <span>Generating...</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="panel-text">
+                                    {panel.panelText || "..."}
+                                    </div>
+                                    {showDescriptions && (
+                                        <div className="panel-description">
+                                            {panel.sceneDescription || "..."}
                                         </div>
                                     )}
                                 </div>
-                                <div className="panel-text">
-                                   {panel.panelText || "..."}
-                                </div>
-                                {showDescriptions && (
-                                    <div className="panel-description">
-                                        {panel.sceneDescription || "..."}
-                                    </div>
-                                )}
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </React.Fragment>
-            ))}
+                ))}
+            </div>
 
             <div className="comic-stats">
                 <div className="stat-item">
@@ -536,7 +584,7 @@ const App = () => {
         setComicPanels([]);
         setProgress({ stage: 'idle', message: 'Waiting to start...', percentage: 0 });
         setError(null);
-        setConfig(prev => ({...prev, storyScript: '', pages: 1}));
+        setConfig(prev => ({...prev, storyScript: '', pages: 1, artStyle: '', comicEra: ''}));
         setCharacters([]);
     };
 
