@@ -1,4 +1,3 @@
-
 :root {
   --background-color: #0D0F1E;
   --container-bg: #1A1A3A;
@@ -333,6 +332,29 @@ input:disabled {
     object-fit: cover;
 }
 
+.model-sheet-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-color);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+}
+.model-sheet-section .description {
+    color: var(--secondary-text);
+    font-size: 0.9rem;
+}
+.model-sheet-preview {
+    width: 100%;
+    height: 180px; /* Fixed height for consistency */
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 
 /* Generation Step */
 .generation-container {
@@ -593,6 +615,9 @@ input:checked + .slider:before {
 /* Responsive Design */
 @media (max-width: 900px) {
     .form-grid {
+        grid-template-columns: 1fr;
+    }
+    .model-sheet-section {
         grid-template-columns: 1fr;
     }
 }
