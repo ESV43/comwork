@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, GenerateContentResponse, Chat, Part } from "@google/genai";
@@ -113,13 +112,13 @@ const Header = ({ currentStep }: { currentStep: AppStep }) => {
     );
 };
 
-const ConfigurationStep = ({ config, setConfig, onNext }) => {
+const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => {
     const handleInputChange = (e) => {
         const { name, value, type } = e.target;
         setConfig(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value, 10) : value }));
     };
     
-    const isNextDisabled = !config.storyScript.trim() || !config.artStyle || !config.comicEra;
+    const isNextDisabled = !apiKey.trim() || !config.storyScript.trim() || !config.artStyle || !config.comicEra;
 
     return (
         <div className="step-container">
@@ -127,6 +126,20 @@ const ConfigurationStep = ({ config, setConfig, onNext }) => {
                 <IconCog />
                 <h2>Configuration</h2>
             </div>
+
+            <div className="form-group full-width" style={{background: 'var(--primary-glow)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '1.5rem'}}>
+                <label htmlFor="apiKey">Gemini API Key</label>
+                <input
+                    type="password"
+                    id="apiKey"
+                    name="apiKey"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your Gemini API Key to begin"
+                />
+                <p className="form-note">Your API Key is only stored in your browser for this session.</p>
+            </div>
+
             <div className="form-group full-width">
                 <label htmlFor="storyScript">Story Script</label>
                 <textarea
@@ -483,9 +496,7 @@ const ComicViewStep = ({ panels, config, onRestart }) => {
 
 
 const App = () => {
-    // This is a placeholder for the API Key.
-    // In a real application, this should be handled securely.
-    const [apiKey] = useState(process.env.API_KEY);
+    const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
     const [appStep, setAppStep] = useState<AppStep>('configuration');
     const [error, setError] = useState<string | null>(null);
 
@@ -814,7 +825,7 @@ ${characterDescriptions || 'None defined'}`;
 
     const generateComic = useCallback(async () => {
         if (!ai) {
-            setError("AI Client not initialized. Make sure your API Key is set.");
+            setError("AI Client not initialized. Please enter a valid API Key in the configuration step.");
             setAppStep('configuration');
             return;
         }
@@ -846,7 +857,7 @@ ${characterDescriptions || 'None defined'}`;
     const renderStep = () => {
         switch (appStep) {
             case 'configuration':
-                return <ConfigurationStep config={config} setConfig={setConfig} onNext={() => setAppStep('characters')} />;
+                return <ConfigurationStep config={config} setConfig={setConfig} onNext={() => setAppStep('characters')} apiKey={apiKey} setApiKey={setApiKey} />;
             case 'characters':
                 return <CharactersStep characters={characters} setCharacters={setCharacters} onBack={() => setAppStep('configuration')} onNext={() => setAppStep('generation')} />;
             case 'generation':
@@ -863,8 +874,7 @@ ${characterDescriptions || 'None defined'}`;
             <Header currentStep={appStep} />
             <main className="main-content">
                 {error && <div className="error-message"><IconError/> {error}</div>}
-                {!apiKey && <div className="error-message"><IconError/> API_KEY environment variable not set. Please follow the setup instructions to use the application.</div>}
-                {apiKey && renderStep()}
+                {renderStep()}
             </main>
         </div>
     );
