@@ -24,7 +24,7 @@ interface Character {
     description: string;
     referenceImages: { file: File, base64: string }[];
     modelSheetUrl: string | null;
-    modelSheetBase64: string | null;
+    modelSheetBase64: string | null; 
     isGeneratingModelSheet: boolean;
 }
 
@@ -69,14 +69,11 @@ const fileToBase64 = (file: File): Promise<string> => {
 
 // --- MODEL LISTS (EXPANDED & CORRECTED) ---
 const textModels = [
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Most Powerful)' },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-    { id: 'gemini-2.5-flash-lite-preview-06-17', name: 'Gemini 2.5 Flash-Lite Preview' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-    { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash-Lite' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Powerful)' },
     { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Fast & Balanced)' },
-    { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash-8B' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Most Powerful)' },
 ];
 
 const imageModels = [
@@ -629,8 +626,6 @@ const App = () => {
         setError(null);
         
         try {
-            const chat: Chat = ai.chats.create({ model: config.imageModel });
-
             const modelSheetPrompt = `Generate a high-quality, front-facing character portrait to be used as a consistent model sheet for a comic book.
 Character Name: ${character.name}
 Character Description: ${character.description}
@@ -638,12 +633,19 @@ The character should have a neutral expression. The image should be clean, well-
 This is a "model sheet" image, so focus on a clear and reusable depiction of the character's face and key features.
 Art Style: ${config.artStyle}, ${config.comicEra} style.`;
             
-            const promptParts: Part[] = [{ text: modelSheetPrompt }];
             const image = character.referenceImages[0];
             const base64Data = image.base64.split(',')[1];
-            promptParts.push({ inlineData: { mimeType: image.file.type, data: base64Data }});
+            
+            const promptParts: Part[] = [
+                { text: modelSheetPrompt },
+                { inlineData: { mimeType: image.file.type, data: base64Data }}
+            ];
 
-            const result = await chat.sendMessage({ message: promptParts });
+            const result = await ai.models.generateContent({
+                model: config.imageModel,
+                contents: promptParts,
+            });
+            
             const generatedPart = result.candidates?.[0]?.content?.parts.find(p => p.inlineData);
 
             if (generatedPart?.inlineData) {
@@ -709,7 +711,7 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
                     panelPromptText += `**Character References**: You MUST use the following model sheets to draw the characters. Match them perfectly.\n`;
                     for(const char of charactersInPanel) {
                         if (char.modelSheetBase64) {
-                            panelPromptText += `This is the definitive look for **${char.name}**. \n`;
+                            panelPromptText += `CRITICAL REFERENCE for character '${char.name}': You MUST use this image for their face and appearance. Replicate it exactly.\n`;
                             promptParts.push({ inlineData: { mimeType: 'image/png', data: char.modelSheetBase64 }});
                         } else {
                             panelPromptText += `Description for **${char.name}**: ${char.description}\n`;
