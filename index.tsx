@@ -276,6 +276,9 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext }) => {
                 <div>
                     <h2>Character Setup</h2>
                     <p>Define your characters and upload reference images for consistency across panels.</p>
+                     <p className="form-note" style={{marginTop: '0.5rem'}}>
+                        <strong>Pro Tip:</strong> Providing at least one clear reference image per character is the best way to prevent the AI from mixing up their appearances.
+                    </p>
                 </div>
             </div>
 
@@ -675,9 +678,15 @@ The output must be only the JSON array, without any markdown formatting.${additi
                     message: `Generating image for panel ${panel.panel} on page ${panel.page}...`,
                 }));
                 
+                // Reinforce character identity in the text prompt for Imagen models
+                const reinforcedCharacterDescriptions = characters
+                    .filter(c => c.name.trim())
+                    .map(c => `Crucially, when drawing "${c.name}", ensure they match their description: ${c.description || 'No description provided.'}`)
+                    .join('\n');
+
                 const imagePrompt = `Comic book panel in a ${config.artStyle} style, reminiscent of the ${config.comicEra}.
 Scene: ${panel.sceneDescription}.
-${characterDescriptions ? `Featuring characters:\n${characterDescriptions}` : ''}
+${reinforcedCharacterDescriptions}
 Aspect ratio: ${config.aspectRatio}.
 Quality Requirements:
 - Create professional, clean, and coherent comic art.
@@ -731,11 +740,6 @@ Negative Prompts (what to avoid):
 
         // --- STAGE 1: BREAK STORY INTO PAGE SUMMARIES ---
         setProgress({ stage: 'story', message: 'Breaking story into pages...', percentage: 0 });
-
-        const characterDescriptions = characters
-            .filter(c => c.name.trim())
-            .map(c => `- ${c.name}: ${c.description || 'No description provided.'}`)
-            .join('\n');
             
         const additionalInstructionsText = config.additionalInstructions ? `\n\nADDITIONAL INSTRUCTIONS:\n${config.additionalInstructions}` : '';
 
@@ -798,11 +802,11 @@ Negative Prompts (what to avoid):
 
 The art style must be: ${config.artStyle}, from the ${config.comicEra}.
 The aspect ratio for images must be ${config.aspectRatio}.
-Use the provided character reference images to ensure the characters you draw match their appearance exactly. Do not change the character's appearance.
+It is ESSENTIAL to use the provided character reference images. When a character is mentioned, you MUST draw them to look exactly like their reference photo. Do not mix features between characters.
 
 Quality Requirements for Images:
 - Create professional, clean, and coherent comic art.
-- Pay close attention to anatomy in the scene description and generated image. Figures should be anatomically correct and well-proportioned.
+- Pay close attention to anatomy. Figures should be anatomically correct and well-proportioned.
 - Hands should be well-formed with the correct number of fingers.
 - Faces must be clear, expressive, and symmetrical. Avoid distorted features.
 Negative Prompts for Images (what to avoid):
@@ -811,15 +815,7 @@ Negative Prompts for Images (what to avoid):
 - Avoid blurry, noisy, or low-quality images.
 - Avoid text, watermarks, or signatures in the image.
 
-Repeat this process for all panels needed to tell the story for this page. Do not add any other text, titles, or commentary. Just start with the text for the first panel of this page.${additionalInstructionsText}`;
-
-            const pagePromptText = `${pageInstructions}
----
-PAGE ${currentPageNumber} SUMMARY:
-${currentPageSummary}
----
-CHARACTERS:
-${characterDescriptions || 'None defined'}`;
+Repeat this process for all panels needed to tell the story for this page. Do not add any other text, titles, or commentary. Just start with the text for the first panel of this page.`;
 
             try {
                 const chat: Chat = ai.chats.create({
@@ -830,17 +826,34 @@ ${characterDescriptions || 'None defined'}`;
                     } as any,
                 });
 
-                const promptParts: Part[] = [{ text: pagePromptText }];
+                // **NEW: Structured Prompt with Interleaved Images**
+                const promptParts: Part[] = [];
+
+                // 1. Add character references first, creating a strong link.
+                promptParts.push({ text: "First, here are the character references you must use." });
                 for (const character of characters) {
-                    for (const image of character.referenceImages) {
-                        promptParts.push({
-                            inlineData: {
-                                mimeType: image.file.type,
-                                data: image.base64.split(',')[1],
-                            }
-                        });
+                    if (character.name && character.referenceImages.length > 0) {
+                        promptParts.push({ text: `This is the reference for "${character.name}". Description: ${character.description || 'N/A'}` });
+                        for (const image of character.referenceImages) {
+                            promptParts.push({
+                                inlineData: {
+                                    mimeType: image.file.type,
+                                    data: image.base64.split(',')[1],
+                                }
+                            });
+                        }
                     }
                 }
+                
+                // 2. Add the main instructions and page summary
+                const mainPromptText = `${pageInstructions}
+---
+PAGE ${currentPageNumber} SUMMARY:
+${currentPageSummary}
+---
+${additionalInstructionsText}`;
+
+                promptParts.push({ text: mainPromptText });
 
                 const result = await chat.sendMessageStream({ message: promptParts });
 
