@@ -24,6 +24,8 @@ interface Character {
     name: string;
     description: string;
     referenceImages: { file: File, base64: string }[];
+    modelSheetUrl?: string;
+    isGeneratingModelSheet?: boolean;
 }
 
 interface ComicPanel {
@@ -193,6 +195,7 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
                         <option value="Manga">Manga</option>
                         <option value="Cartoon">Cartoon</option>
                         <option value="Pixel Art">Pixel Art</option>
+                        <option value="3D">3D</option>
                     </select>
                     <select name="comicEra" value={config.comicEra} onChange={handleInputChange}>
                         <option value="">Select comic era</option>
@@ -238,7 +241,7 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
     );
 };
 
-const CharactersStep = ({ characters, setCharacters, onBack, onNext }) => {
+const CharactersStep = ({ characters, setCharacters, onBack, onNext, ai, config }) => {
 
     const addCharacter = () => {
         setCharacters(prev => [...prev, { id: Date.now().toString(), name: '', description: '', referenceImages: [] }]);
@@ -265,6 +268,53 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext }) => {
         }));
     };
 
+    const generateModelSheet = async (characterId: string) => {
+        if (!ai) {
+            alert("AI not initialized. Please configure API key in the first step.");
+            return;
+        }
+        const character = characters.find(c => c.id === characterId);
+        if (!character || character.referenceImages.length === 0 || !character.name) {
+            alert("Please provide a name and at least one reference image before generating a model sheet.");
+            return;
+        }
+    
+        setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, isGeneratingModelSheet: true } : c));
+    
+        try {
+            const modelSheetPrompt = `Create a single, high-quality character model sheet in a ${config.artStyle} style from the ${config.comicEra}. The character is named "${character.name}". 
+Description: ${character.description}. 
+The model sheet should show the character's face and upper body clearly from the front. Ensure their facial features, hair, and clothing are well-defined and consistent with the provided reference images. The background should be a neutral grey.
+Output ONLY the final image. Do not add any text or annotations to the image itself.`;
+    
+            const promptParts: Part[] = [ { text: modelSheetPrompt } ];
+            for (const img of character.referenceImages) {
+                promptParts.push({ inlineData: { mimeType: img.file.type, data: img.base64.split(',')[1] } });
+            }
+            
+            // Use a powerful multimodal model for this task.
+            const result = await ai.models.generateContent({
+                model: 'gemini-1.5-pro',
+                contents: [{ role: 'user', parts: promptParts }],
+            });
+    
+            const imagePart = result.response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    
+            if (imagePart && imagePart.inlineData) {
+                const base64Image = imagePart.inlineData.data;
+                const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${base64Image}`;
+                setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, modelSheetUrl: imageUrl, isGeneratingModelSheet: false } : c));
+            } else {
+                throw new Error("AI did not return a valid image for the model sheet. It might have been blocked by safety settings.");
+            }
+    
+        } catch (error) {
+            console.error("Model sheet generation failed:", error);
+            alert(`Failed to generate model sheet: ${error.message}`);
+            setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, isGeneratingModelSheet: false } : c));
+        }
+    };
+
     useEffect(() => {
       if (characters.length === 0) {
         addCharacter();
@@ -277,11 +327,8 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext }) => {
             <div className="step-header">
                 <IconPeople />
                 <div>
-                    <h2>Character Setup</h2>
-                    <p>Define your characters. For best results, use their names explicitly in your story script.</p>
-                     <p className="form-note" style={{marginTop: '0.5rem'}}>
-                        <strong>Pro Tip:</strong> Providing at least one clear reference image per character is the best way to prevent the AI from mixing up their appearances.
-                    </p>
+                    <h2>Character Setup & Model Sheets</h2>
+                    <p>Define your characters. For best consistency, upload a reference image and then generate a "Model Sheet" for each character.</p>
                 </div>
             </div>
 
@@ -296,7 +343,7 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext }) => {
                         <textarea placeholder="Describe the character's appearance, personality, etc." value={char.description} onChange={(e) => updateCharacter(char.id, 'description', e.target.value)} />
                     </div>
                     <div className="form-group">
-                        <label>Reference Images (Optional)</label>
+                        <label>1. Upload Reference Images (Optional)</label>
                         <input type="file" id={`file-input-${char.id}`} multiple accept="image/png, image/jpeg" style={{ display: 'none' }} onChange={(e) => handleImageUpload(char.id, e.target.files)} />
                         <label htmlFor={`file-input-${char.id}`} className="file-uploader">
                             <IconUpload />
@@ -310,6 +357,31 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext }) => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                    <div className="form-group" style={{marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)'}}>
+                        <label>2. Generate Official Model Sheet</label>
+                        <p className="form-note" style={{marginTop: 0, marginBottom: '1rem'}}>This creates a canonical image the AI will use for all future panels, ensuring consistency.</p>
+                        
+                        {char.isGeneratingModelSheet ? (
+                             <button className="button button-primary" disabled><IconSpinner /> Generating...</button>
+                        ) : (
+                            <button 
+                                className="button button-primary" 
+                                onClick={() => generateModelSheet(char.id)} 
+                                disabled={!char.name || char.referenceImages.length === 0 || !config.artStyle}
+                            >
+                                {char.modelSheetUrl ? 'Re-generate Model Sheet' : 'Generate Model Sheet'}
+                            </button>
+                        )}
+                        {!config.artStyle && <p className="form-note" style={{color: 'var(--error-color)'}}>You must select a Visual Style in the Configuration step first.</p>}
+
+                        {char.modelSheetUrl && (
+                            <div className="image-previews" style={{marginTop: '1rem'}}>
+                                <div className="image-preview" style={{width: '120px', height: '120px', border: '2px solid var(--accent-color)'}}>
+                                    <img src={char.modelSheetUrl} alt="Generated Model Sheet" />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             ))}
@@ -596,202 +668,9 @@ const App = () => {
         setCharacters([]);
     };
 
-    const generateWithImagenModels = useCallback(async () => {
-        if (!ai) return;
-        // --- STAGE 1: STORY BREAKDOWN ---
-        setProgress({ stage: 'story', message: 'Analyzing story script...', percentage: 0 });
-        
-        const characterDescriptions = characters
-            .filter(c => c.name.trim())
-            .map(c => `- ${c.name}: ${c.description || 'No description provided.'}`)
-            .join('\n');
-            
-        const additionalInstructionsText = config.additionalInstructions ? `\n\nADDITIONAL INSTRUCTIONS:\n${config.additionalInstructions}` : '';
-
-        const systemInstruction = `You are a comic book scriptwriter. Your task is to take a story script and break it down into distinct comic book panels across ${config.pages} page(s).
-Each panel must be assigned a "page" number and a "panel" number (which resets for each page). Each panel must have a "sceneDescription" for the artist and "panelText" for the narrator or dialogue.
-When writing the sceneDescription, be EXPLICIT with character names. Do not use pronouns like "he" or "she". Use their actual names (e.g., "Hero stands on the roof," not "He stands on the roof"). This is critical for the artist AI.
-Pace the story appropriately across the requested number of pages.
-Characters:
-${characterDescriptions || "No specific characters defined."}
-Output a valid JSON array of objects, where each object represents a panel and has the following structure: { "page": number, "panel": number, "sceneDescription": string, "panelText": string }.
-The output must be only the JSON array, without any markdown formatting.`;
-
-        let parsedPanels: Omit<ComicPanel, 'id' | 'status' | 'imageUrl'>[] = [];
-        try {
-            const response = await ai.models.generateContent({
-                model: config.textModel,
-                contents: `Generate a comic script breakdown for the following story, following all rules in the system instruction: ${config.storyScript}`,
-                config: { systemInstruction, responseMimeType: "application/json" }
-            });
-
-            setProgress({ stage: 'story', message: 'Parsing story structure...', percentage: 15 });
-            
-            let jsonStr = response.text.trim().replace(/^```json\s*|```\s*$/g, '');
-            parsedPanels = JSON.parse(jsonStr);
-            if (!Array.isArray(parsedPanels) || !parsedPanels.every(p => 'page' in p && 'panel' in p && 'sceneDescription' in p && 'panelText' in p)) {
-                throw new Error("Invalid panel structure received from AI.");
-            }
-            
-            const initialPanels = parsedPanels.map((p, i) => ({ ...p, id: i, status: 'pending' as const, imageUrl: undefined }));
-            setComicPanels(initialPanels);
-
-            // --- STAGE 2: IMAGE GENERATION ---
-            setProgress({ stage: 'images', message: 'Generating panel images...', percentage: 20 });
-            
-            const totalPanels = initialPanels.length;
-            for (let i = 0; i < totalPanels; i++) {
-                const panel = initialPanels[i];
-                
-                setComicPanels(prev => prev.map(p => p.id === panel.id ? { ...p, status: 'generating' } : p));
-                 setProgress(prev => ({
-                    ...prev,
-                    message: `Generating image for panel ${panel.panel} on page ${panel.page}...`,
-                }));
-                
-                // **THE CRITICAL FIX FOR CHARACTER CONSISTENCY**
-                // Dynamically build character references ONLY for characters in this specific panel.
-                const panelSpecificCharacterDescriptions = characters
-                    .filter(char => char.name && panel.sceneDescription.includes(char.name))
-                    .map(char => `- **${char.name}**: ${char.description || 'No description'}`)
-                    .join('\n');
-
-                const imagePrompt = `Professional comic book panel in a ${config.artStyle} style, from the ${config.comicEra}.
-**Scene Description**: ${panel.sceneDescription}
-${panelSpecificCharacterDescriptions ? `**Character References For This Panel ONLY**:
-${panelSpecificCharacterDescriptions}` : ''}
-**Overall Style Notes**:
-- Aspect Ratio: ${config.aspectRatio}
-- Art Style: Hyper-detailed, cinematic lighting, sharp focus, professional digital art.
-${additionalInstructionsText}
-**MANDATORY**: Adhere strictly to the character descriptions provided. DO NOT mix character features.
-**Negative Prompts (what to avoid)**:
-- Avoid text, watermarks, signatures, blurry images, noise, jpeg artifacts, compression, amateurish art.
-- Avoid disfigured, deformed, or mutated body parts. No extra or missing limbs/fingers.`;
-                
-                try {
-                     const imageResponse = await ai.models.generateImages({
-                        model: config.imageModel,
-                        prompt: imagePrompt,
-                        config: { 
-                            numberOfImages: 1,
-                            outputMimeType: 'image/jpeg',
-                            seed: config.seed ? parseInt(config.seed, 10) : undefined,
-                        },
-                    });
-    
-                    if (imageResponse.generatedImages && imageResponse.generatedImages.length > 0) {
-                        const base64ImageBytes = imageResponse.generatedImages[0].image.imageBytes;
-                        const imageUrl = `data:image/jpeg;base64,${base64ImageBytes}`;
-                        setComicPanels(prev => prev.map(p => p.id === panel.id ? { ...p, status: 'done', imageUrl } : p));
-                    } else {
-                        throw new Error("API returned no images.");
-                    }
-                } catch (e) {
-                    console.error(`Image generation failed for panel ${panel.panel}:`, e);
-                    setComicPanels(prev => prev.map(p => p.id === panel.id ? { ...p, status: 'error' } : p));
-                }
-    
-                setProgress(prev => ({ ...prev, percentage: 20 + ((i + 1) / totalPanels) * 75 }));
-            }
-        } catch (e) {
-            console.error("Story generation failed:", e);
-            setError(`Story generation failed: ${e.message}`);
-            setAppStep('configuration');
-            return;
-        }
-    }, [ai, config, characters]);
-    
-    const generateWithChatModel = useCallback(async () => {
-        // NOTE: This flow is kept for models that support it, but the Imagen flow is now recommended for character consistency.
-        if (!ai) return;
-
-        setProgress({ stage: 'story', message: 'Breaking story into pages...', percentage: 0 });
-        const additionalInstructionsText = config.additionalInstructions ? `\n\nADDITIONAL INSTRUCTIONS:\n${config.additionalInstructions}` : '';
-        const pageBreakdownPrompt = `You are a screenwriting assistant. Your task is to take a long story script and divide it into a series of smaller, self-contained page summaries for a comic book. The user will specify the total number of pages. You must divide the story's plot points, dialogue, and action evenly and logically across the requested number of pages. For each page, provide a concise but detailed summary of the events, character actions, and key dialogue that should occur on that page. Your output must be a valid JSON array of strings, where each string is the summary for one page. The array must have exactly ${config.pages} elements.${additionalInstructionsText}`;
-
-        let pageSummaries: string[] = [];
-        try {
-            const response = await ai.models.generateContent({
-                model: config.textModel,
-                contents: `Story: "${config.storyScript}". Break this into ${config.pages} page(s).`,
-                config: { systemInstruction: pageBreakdownPrompt, responseMimeType: "application/json" }
-            });
-            setProgress({ stage: 'story', message: 'Parsing page structure...', percentage: 5 });
-            let jsonStr = response.text.trim().replace(/^```json\s*|```\s*$/g, '');
-            const parsedData = JSON.parse(jsonStr);
-
-            if (!Array.isArray(parsedData) || parsedData.some(item => typeof item !== 'string')) throw new Error("AI did not return a valid array of page summary strings.");
-            pageSummaries = parsedData;
-        } catch (e) {
-            console.error("Page breakdown failed:", e);
-            setError(`Failed to break down story into pages: ${e.message}`);
-            setAppStep('configuration');
-            return;
-        }
-
-        setProgress({ stage: 'images', message: 'Starting image generation...', percentage: 10 });
-        setComicPanels([]);
-        let panelIdCounter = 0;
-
-        for (let i = 0; i < pageSummaries.length; i++) {
-            const currentPageSummary = pageSummaries[i];
-            const currentPageNumber = i + 1;
-            setProgress(prev => ({ ...prev, stage: 'images', message: `Generating panels for page ${currentPageNumber}...`, percentage: 10 + (i / pageSummaries.length) * 85 }));
-
-            const pageInstructions = `You are an AI Comic Creator. Your task is to generate a comic page based on a page summary and character reference images. For each panel, do two things in order:
-1. Write the panel's text (dialogue/narration).
-2. Write a detailed scene description for the artist.
-3. Generate the image for that panel.
-**MANDATORY**: Use the provided character references. When a character is mentioned, you MUST draw them to look exactly like their reference photo. DO NOT mix character features.`;
-            
-            try {
-                const chat: Chat = ai.chats.create({ model: config.imageModel, history: [], config: { responseModalities: ["TEXT", "IMAGE"] } as any });
-                const promptParts: Part[] = [{ text: "First, here are the character references you must use." }];
-                for (const character of characters) {
-                    if (character.name && character.referenceImages.length > 0) {
-                        promptParts.push({ text: `This is the reference for "${character.name}". Description: ${character.description || 'N/A'}` });
-                        for (const image of character.referenceImages) {
-                            promptParts.push({ inlineData: { mimeType: image.file.type, data: image.base64.split(',')[1] } });
-                        }
-                    }
-                }
-                const mainPromptText = `${pageInstructions}\n---\nPAGE ${currentPageNumber} SUMMARY:\n${currentPageSummary}\n---${additionalInstructionsText}`;
-                promptParts.push({ text: mainPromptText });
-                const result = await chat.sendMessageStream({ message: promptParts });
-                let textBuffer = '';
-                let panelCountForPage = 1;
-
-                for await (const chunk of result) {
-                    const parts = chunk.candidates?.[0]?.content?.parts;
-                    if (!parts) continue;
-                    for (const part of parts) {
-                        if (part.text) {
-                            textBuffer += part.text;
-                        } else if (part.inlineData) {
-                            const { data } = part.inlineData;
-                            const imageUrl = `data:image/png;base64,${data}`;
-                            const lines = textBuffer.trim().split('\n');
-                            const panelText = lines[0] || '...';
-                            const sceneDescription = lines.slice(1).join('\n').trim() || 'AI generated scene.';
-                            const newPanel: ComicPanel = { id: panelIdCounter++, page: currentPageNumber, panel: panelCountForPage++, panelText, sceneDescription, imageUrl, status: 'done' };
-                            setComicPanels(prev => [...prev, newPanel]);
-                            textBuffer = '';
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error(`Native image generation failed for page ${currentPageNumber}:`, e);
-                setError(`Generation failed on page ${currentPageNumber}: ${e.message}. The comic may be incomplete.`);
-                setAppStep('comic');
-                return;
-            }
-        }
-    }, [ai, config, characters]);
-
     const generateComic = useCallback(async () => {
         if (!ai) {
-            setError("AI Client not initialized. Please enter a valid API Key in the configuration step.");
+            setError("AI Client not initialized. Please enter a valid API Key.");
             setAppStep('configuration');
             return;
         }
@@ -799,19 +678,122 @@ ${additionalInstructionsText}
         setAppStep('generation');
         setComicPanels([]);
 
-        if (config.imageModel === 'gemini-2.0-flash-preview-image-generation') {
-            await generateWithChatModel();
-        } else {
-            // This is now the recommended flow for quality and consistency
-            await generateWithImagenModels();
-        }
+        try {
+            // --- STAGE 1: STORY BREAKDOWN ---
+            setProgress({ stage: 'story', message: 'Analyzing story script...', percentage: 0 });
+            
+            const characterDescriptions = characters
+                .filter(c => c.name.trim())
+                .map(c => `- ${c.name}: ${c.description || 'No description provided.'}`)
+                .join('\n');
+                
+            const systemInstruction = `You are a comic book scriptwriter. Your task is to take a story script and break it down into distinct comic book panels across ${config.pages} page(s).
+Each panel must be assigned a "page" number and a "panel" number (which resets for each page). Each panel must have a "sceneDescription" for the artist and "panelText" for the narrator or dialogue.
+When writing the sceneDescription, be EXPLICIT with character names. Do not use pronouns like "he" or "she". Use their actual names (e.g., "Hero stands on the roof," not "He stands on the roof"). This is critical for the artist AI.
+Pace the story appropriately across the requested number of pages.
+Characters:
+${characterDescriptions || "No specific characters defined."}
+${config.additionalInstructions ? `\nADDITIONAL INSTRUCTIONS:\n${config.additionalInstructions}` : ''}
+Output a valid JSON array of objects, where each object represents a panel and has the following structure: { "page": number, "panel": number, "sceneDescription": string, "panelText": string }.
+The output must be only the JSON array, without any markdown formatting.`;
 
-        setProgress({ stage: 'assembly', message: 'Assembling comic...', percentage: 99 });
-        setTimeout(() => {
-            setProgress({ stage: 'done', message: 'Complete!', percentage: 100 });
-            setAppStep('comic');
-        }, 500);
-    }, [ai, config, characters, generateWithImagenModels, generateWithChatModel]);
+            const response = await ai.models.generateContent({
+                model: config.textModel,
+                contents: `Generate a comic script breakdown for the following story, following all rules in the system instruction: ${config.storyScript}`,
+                config: { systemInstruction, responseMimeType: "application/json" }
+            });
+
+            setProgress({ stage: 'story', message: 'Parsing story structure...', percentage: 15 });
+            let jsonStr = response.text.trim().replace(/^```json\s*|```\s*$/g, '');
+            const parsedPanels = JSON.parse(jsonStr);
+
+            if (!Array.isArray(parsedPanels) || !parsedPanels.every(p => 'page' in p && 'panel' in p && 'sceneDescription' in p && 'panelText' in p)) {
+                throw new Error("Invalid panel structure received from AI.");
+            }
+            
+            const initialPanels = parsedPanels.map((p, i) => ({ ...p, id: i, status: 'pending' as const, imageUrl: undefined }));
+            setComicPanels(initialPanels);
+
+            // --- STAGE 2: IMAGE GENERATION (Multi-modal) ---
+            setProgress({ stage: 'images', message: 'Generating panel images...', percentage: 20 });
+            
+            const totalPanels = initialPanels.length;
+            for (let i = 0; i < totalPanels; i++) {
+                const panel = initialPanels[i];
+                
+                setComicPanels(prev => prev.map(p => p.id === panel.id ? { ...p, status: 'generating' } : p));
+                setProgress(prev => ({
+                    ...prev,
+                    message: `Generating image for panel ${panel.panel} on page ${panel.page}...`,
+                }));
+
+                try {
+                    const promptParts: Part[] = [];
+                    const charactersInPanel = characters.filter(char => char.name && panel.sceneDescription.includes(char.name));
+
+                    let characterReferenceText = '';
+                    for (const char of charactersInPanel) {
+                        characterReferenceText += `- **${char.name}**: ${char.description || 'No description'}\n`;
+                        const imageToUse = char.modelSheetUrl
+                            ? [{ base64: char.modelSheetUrl, file: { type: 'image/png' } }] // Use model sheet
+                            : char.referenceImages; // Fallback to reference images
+
+                        for (const img of imageToUse) {
+                           promptParts.push({ inlineData: { mimeType: img.file.type, data: img.base64.split(',')[1] } });
+                        }
+                    }
+
+                    const imagePrompt = `You are an AI comic artist. Create a single comic book panel based on the provided reference images and scene description.
+Style: ${config.artStyle}, from the ${config.comicEra}.
+**Scene Description**: ${panel.sceneDescription}
+${characterReferenceText ? `**Character References**: You MUST make the characters look exactly like the provided images.\n${characterReferenceText}` : ''}
+**Overall Style Notes**:
+- Aspect Ratio: ${config.aspectRatio}
+- Art Style: Hyper-detailed, cinematic lighting, sharp focus, professional digital art.
+${config.additionalInstructions}
+**MANDATORY**: Adhere strictly to the character references provided. DO NOT mix character features.
+**Output**: A single image of the panel. Do not add any text, watermarks, or signatures to the image itself.`;
+                    
+                    promptParts.unshift({ text: imagePrompt });
+
+                    const imageResponse = await ai.models.generateContent({
+                        model: config.imageModel,
+                        contents: [{ role: 'user', parts: promptParts }],
+                        generationConfig: {
+                            seed: config.seed ? parseInt(config.seed, 10) : undefined
+                        }
+                    });
+                    
+                    const imagePart = imageResponse.response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+
+                    if (imagePart && imagePart.inlineData) {
+                        const base64ImageBytes = imagePart.inlineData.data;
+                        const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${base64ImageBytes}`;
+                        setComicPanels(prev => prev.map(p => p.id === panel.id ? { ...p, status: 'done', imageUrl } : p));
+                    } else {
+                        throw new Error("API returned no image. It may have been blocked by safety settings.");
+                    }
+                } catch (e) {
+                    console.error(`Image generation failed for panel ${panel.id}:`, e);
+                    setComicPanels(prev => prev.map(p => p.id === panel.id ? { ...p, status: 'error' } : p));
+                }
+
+                setProgress(prev => ({ ...prev, percentage: 20 + ((i + 1) / totalPanels) * 75 }));
+            }
+
+            // --- STAGE 3: ASSEMBLY ---
+            setProgress({ stage: 'assembly', message: 'Assembling comic...', percentage: 99 });
+            setTimeout(() => {
+                setProgress({ stage: 'done', message: 'Complete!', percentage: 100 });
+                setAppStep('comic');
+            }, 500);
+
+        } catch (e) {
+            console.error("Comic generation failed:", e);
+            setError(`Comic generation failed: ${e.message}`);
+            setAppStep('configuration'); // Go back to config on major failure
+        }
+    }, [ai, config, characters]);
     
     useEffect(() => {
         if (appStep === 'generation') {
@@ -824,7 +806,7 @@ ${additionalInstructionsText}
             case 'configuration':
                 return <ConfigurationStep config={config} setConfig={setConfig} onNext={() => setAppStep('characters')} apiKey={apiKey} setApiKey={setApiKey} />;
             case 'characters':
-                return <CharactersStep characters={characters} setCharacters={setCharacters} onBack={() => setAppStep('configuration')} onNext={() => setAppStep('generation')} />;
+                return <CharactersStep characters={characters} setCharacters={setCharacters} onBack={() => setAppStep('configuration')} onNext={() => setAppStep('generation')} ai={ai} config={config} />;
             case 'generation':
                 return <GenerationStep progress={progress} panels={comicPanels} config={config} />;
             case 'comic':
