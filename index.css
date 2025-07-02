@@ -215,6 +215,15 @@ textarea {
     color: var(--secondary-text);
 }
 
+.form-note.error-note {
+    font-size: 0.8rem;
+    color: var(--error-color);
+    background-color: var(--error-bg);
+    padding: 0.5rem;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+}
+
 ::placeholder {
     color: #6a6a8a;
 }
