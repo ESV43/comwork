@@ -66,14 +66,17 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-// --- MODEL LISTS ---
+// --- MODEL LISTS (EXPANDED) ---
 const textModels = [
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
-    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Powerful)' },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Fast & Balanced)' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Most Powerful)' },
 ];
 
 const imageModels = [
-    { id: 'imagen-3.0-generate-002', name: 'Imagen 3' },
+    { id: 'imagen-3.0-generate-002', name: 'Imagen 3 (Best Quality)' },
     { id: 'imagen-4.0-generate-preview-06-06', name: 'Imagen 4 Preview' },
     { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash (Native Image Gen)' },
 ];
@@ -173,9 +176,6 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
                             <option key={model.id} value={model.id}>{model.name}</option>
                         ))}
                     </select>
-                     <p className="form-note" style={{marginTop: '0.5rem'}}>
-                        <strong>Tip:</strong> For best quality and instruction-following, we recommend using <strong>Imagen 3</strong>.
-                    </p>
                 </div>
                  <div className="form-group">
                     <label>Visual Style</label>
@@ -220,6 +220,12 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
                  <div className="form-group">
                     <label htmlFor="seed">Random Seed (Optional)</label>
                     <input type="text" id="seed" name="seed" value={config.seed} onChange={handleInputChange} placeholder="Leave empty for random"/>
+                </div>
+            </div>
+             <div className="rate-limit-warning">
+                <IconError />
+                <div>
+                    <strong>Getting an error?</strong> This app makes many API calls. If you're on the free tier, you might hit your rate limit (Error 429). Try waiting a minute, or switching to a "Flash" model, which has higher limits.
                 </div>
             </div>
             <div className="button-group">
@@ -561,7 +567,7 @@ const App = () => {
 
     const [config, setConfig] = useState<Config>({
         storyScript: '',
-        textModel: 'gemini-1.5-pro',
+        textModel: 'gemini-1.5-flash',
         imageModel: 'imagen-3.0-generate-002',
         aspectRatio: '16:9',
         pages: 1,
@@ -608,19 +614,19 @@ const App = () => {
         setError(null);
         
         try {
+            const chat: Chat = ai.chats.create({ model: config.imageModel, history: [] });
+
             const modelSheetPrompt = `Generate a high-quality, front-facing character portrait to be used as a consistent model sheet for a comic book.
 Character Name: ${character.name}
 Character Description: ${character.description}
 The character should have a neutral expression. The image should be clean, well-lit, and show the character from the chest up.
 This is a "model sheet" image, so focus on a clear and reusable depiction of the character's face and key features.
-Art Style: ${config.artStyle}, ${config.comicEra} style.
-Based on this reference image:`;
-            
-            const chat: Chat = ai.chats.create({ model: config.imageModel, history: [], config: { responseModalities: ["TEXT", "IMAGE"] } as any });
+Art Style: ${config.artStyle}, ${config.comicEra} style.`;
             
             const promptParts: Part[] = [{ text: modelSheetPrompt }];
             const image = character.referenceImages[0]; // Use the first reference image
-            promptParts.push({ inlineData: { mimeType: image.file.type, data: image.base64.split(',')[1] } });
+            const base64Data = image.base64.split(',')[1];
+            promptParts.push({ inlineData: { mimeType: image.file.type, data: base64Data }});
 
             const result = await chat.sendMessage({ message: promptParts });
             const generatedPart = result.candidates?.[0]?.content?.parts.find(p => p.inlineData);
@@ -669,15 +675,14 @@ Based on this reference image:`;
                 setProgress(prev => ({ ...prev, message: `Generating image for panel ${panel.panel} on page ${panel.page}...` }));
 
                 const promptParts: Part[] = [];
-                let panelPrompt = `Generate a comic book panel. **Scene**: ${panel.sceneDescription}\n`;
+                let panelPromptText = `Generate a comic book panel. **Scene**: ${panel.sceneDescription}\n`;
                 
-                // Find characters in this panel and add their model sheets as references
                 const charactersInPanel = characters.filter(char => char.name && panel.sceneDescription.includes(char.name) && char.modelSheetUrl);
 
                 if (charactersInPanel.length > 0) {
-                    panelPrompt += `**Character References**: Use the following model sheets to draw the characters. Match them perfectly.\n`;
+                    panelPromptText += `**Character References**: Use the following model sheets to draw the characters. Match them perfectly.\n`;
                     for(const char of charactersInPanel) {
-                        panelPrompt += `This is the definitive look for **${char.name}**. \n`;
+                        panelPromptText += `This is the definitive look for **${char.name}**. \n`;
                         const response = await fetch(char.modelSheetUrl);
                         const blob = await response.blob();
                         const base64 = await fileToBase64(new File([blob], "ref.png", {type: blob.type}));
@@ -685,11 +690,11 @@ Based on this reference image:`;
                     }
                 }
 
-                panelPrompt += `**Art Style**: Masterpiece quality, ${config.artStyle}, ${config.comicEra} style. Hyper-detailed, cinematic lighting, sharp focus, professional digital art.
+                panelPromptText += `**Art Style**: Masterpiece quality, ${config.artStyle}, ${config.comicEra} style. Hyper-detailed, cinematic lighting, sharp focus, professional digital art.
 **Overall Instructions**: ${config.additionalInstructions || 'None'}
 **Negative Prompts**: Avoid text, watermarks, blurry images, jpeg artifacts, amateurish art, deformed features, extra limbs.`;
-
-                promptParts.unshift({ text: panelPrompt });
+                
+                promptParts.unshift({ text: panelPromptText });
                 
                 try {
                     const result = await chat.sendMessage({ message: promptParts });
