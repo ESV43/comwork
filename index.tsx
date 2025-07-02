@@ -238,7 +238,7 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
     );
 };
 
-const CharactersStep = ({ characters, setCharacters, onBack, onNext, generateCharacterModelSheet }) => {
+const CharactersStep = ({ characters, setCharacters, onBack, onNext, generateCharacterModelSheet, config }) => {
 
     const addCharacter = () => {
         setCharacters(prev => [...prev, { id: Date.now().toString(), name: '', description: '', referenceImages: [], modelSheetUrl: null, isGeneratingModelSheet: false }]);
@@ -266,6 +266,7 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext, generateCha
       }
     }, [characters.length]);
     
+    const isModelSheetSupported = (modelId) => modelId === 'gemini-2.0-flash-preview-image-generation';
 
     return (
         <div className="step-container">
@@ -277,51 +278,55 @@ const CharactersStep = ({ characters, setCharacters, onBack, onNext, generateCha
                 </div>
             </div>
 
-            {characters.map(char => (
-                <div key={char.id} className="character-card">
-                    <div className="form-group">
-                        <label>Character Name</label>
-                        <input type="text" placeholder="Enter character name" value={char.name} onChange={(e) => updateCharacter(char.id, 'name', e.target.value)} />
-                    </div>
-                    <div className="form-group">
-                        <label>Description (Optional but Recommended)</label>
-                        <textarea placeholder="Describe the character's key features, clothing, etc. This helps the AI." value={char.description} onChange={(e) => updateCharacter(char.id, 'description', e.target.value)} />
-                    </div>
-                    <div className="model-sheet-section">
+            {characters.map(char => {
+                const canGenerateModelSheet = isModelSheetSupported(config.imageModel);
+                return (
+                    <div key={char.id} className="character-card">
                         <div className="form-group">
-                            <label>1. Upload Reference Images (Optional)</label>
-                            <input type="file" id={`file-input-${char.id}`} multiple accept="image/png, image/jpeg" style={{ display: 'none' }} onChange={(e) => handleImageUpload(char.id, e.target.files)} />
-                            <label htmlFor={`file-input-${char.id}`} className="file-uploader">
-                                <IconUpload />
-                                <strong>Click to upload reference images</strong>
-                                <p>PNG, JPG up to 10MB each</p>
-                            </label>
-                            <div className="image-previews">
-                                {char.referenceImages.map(img => (
-                                    <div key={img.base64.substring(20, 50)} className="image-preview">
-                                        <img src={img.base64} alt="Reference" />
-                                    </div>
-                                ))}
-                            </div>
+                            <label>Character Name</label>
+                            <input type="text" placeholder="Enter character name" value={char.name} onChange={(e) => updateCharacter(char.id, 'name', e.target.value)} />
                         </div>
                         <div className="form-group">
-                            <label>2. Generate Official Model Sheet</label>
-                            <p className="form-note">This creates a canonical image the AI will use for all future panels, ensuring consistency.</p>
-                            <button className="button button-secondary" onClick={() => generateCharacterModelSheet(char.id)} disabled={char.referenceImages.length === 0 || char.isGeneratingModelSheet}>
-                                {char.isGeneratingModelSheet ? <><IconSpinner /> Generating...</> : "Generate Model Sheet"}
-                            </button>
-                             <div className="image-previews">
-                                {char.modelSheetUrl && (
-                                     <div className="image-preview model-sheet-preview">
-                                         <img src={char.modelSheetUrl} alt="Official Model Sheet" />
-                                         <div className="preview-label">Official</div>
-                                     </div>
-                                )}
+                            <label>Description (Optional but Recommended)</label>
+                            <textarea placeholder="Describe the character's key features, clothing, etc. This helps the AI." value={char.description} onChange={(e) => updateCharacter(char.id, 'description', e.target.value)} />
+                        </div>
+                        <div className="model-sheet-section">
+                            <div className="form-group">
+                                <label>1. Upload Reference Images</label>
+                                <input type="file" id={`file-input-${char.id}`} multiple accept="image/png, image/jpeg" style={{ display: 'none' }} onChange={(e) => handleImageUpload(char.id, e.target.files)} />
+                                <label htmlFor={`file-input-${char.id}`} className="file-uploader">
+                                    <IconUpload />
+                                    <strong>Click to upload reference images</strong>
+                                    <p>PNG, JPG up to 10MB each</p>
+                                </label>
+                                <div className="image-previews">
+                                    {char.referenceImages.map(img => (
+                                        <div key={img.base64.substring(20, 50)} className="image-preview">
+                                            <img src={img.base64} alt="Reference" />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label>2. Generate Official Model Sheet</label>
+                                <p className="form-note">This creates a canonical image the AI will use for all future panels, ensuring consistency.</p>
+                                <button className="button button-secondary" onClick={() => generateCharacterModelSheet(char.id)} disabled={!canGenerateModelSheet || char.referenceImages.length === 0 || char.isGeneratingModelSheet}>
+                                    {char.isGeneratingModelSheet ? <><IconSpinner /> Generating...</> : "Generate Model Sheet"}
+                                </button>
+                                {!canGenerateModelSheet && <p className="form-note error-note">Model sheets are only supported with the 'Gemini 2.0 Flash (Native Image Gen)' model. Please select it in the configuration step to enable this feature.</p>}
+                                <div className="image-previews">
+                                    {char.modelSheetUrl && (
+                                        <div className="image-preview model-sheet-preview">
+                                            <img src={char.modelSheetUrl} alt="Official Model Sheet" />
+                                            <div className="preview-label">Official</div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
             
             <button className="button button-secondary" onClick={addCharacter}>+ Add Character</button>
 
@@ -610,6 +615,12 @@ const App = () => {
         const character = characters.find(c => c.id === characterId);
         if (!character || character.referenceImages.length === 0 || !ai) return;
 
+        // Ensure the correct model is selected for this feature
+        if (config.imageModel !== 'gemini-2.0-flash-preview-image-generation') {
+            setError("Model Sheet generation is only supported with the 'Gemini 2.0 Flash (Native Image Gen)' model.");
+            return;
+        }
+
         setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, isGeneratingModelSheet: true } : c));
         setError(null);
         
@@ -624,7 +635,7 @@ This is a "model sheet" image, so focus on a clear and reusable depiction of the
 Art Style: ${config.artStyle}, ${config.comicEra} style.`;
             
             const promptParts: Part[] = [{ text: modelSheetPrompt }];
-            const image = character.referenceImages[0]; // Use the first reference image
+            const image = character.referenceImages[0];
             const base64Data = image.base64.split(',')[1];
             promptParts.push({ inlineData: { mimeType: image.file.type, data: base64Data }});
 
@@ -643,9 +654,18 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
             setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, isGeneratingModelSheet: false } : c));
         }
     }, [ai, characters, config.artStyle, config.comicEra, config.imageModel]);
-
-    const generateWithImagenModels = useCallback(async () => {
-        if (!ai) return;
+    
+    const generateComic = useCallback(async () => {
+        if (!ai) {
+            setError("AI Client not initialized. Please enter a valid API Key.");
+            setAppStep('configuration');
+            return;
+        }
+        setError(null);
+        setAppStep('generation');
+        setComicPanels([]);
+        
+        // Main generation logic using the model sheet approach
         setProgress({ stage: 'story', message: 'Analyzing story script...', percentage: 0 });
         
         const systemInstruction = `You are a comic book scriptwriter. Your task is to take a story script and break it down into distinct comic book panels across ${config.pages} page(s). Each panel needs a "page" and "panel" number, a "sceneDescription", and "panelText". IMPORTANT: In the sceneDescription, use character's full names, not pronouns (e.g., "Batman punches Joker", not "He punches him"). This is critical. Output a valid JSON array of panel objects only.`;
@@ -711,31 +731,18 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
     
                 setProgress(prev => ({ ...prev, percentage: 20 + ((i + 1) / initialPanels.length) * 75 }));
             }
+             setProgress({ stage: 'assembly', message: 'Assembling comic...', percentage: 99 });
+            setTimeout(() => {
+                setProgress({ stage: 'done', message: 'Complete!', percentage: 100 });
+                setAppStep('comic');
+            }, 500);
+
         } catch (e) {
             console.error("Comic generation failed:", e);
             setError(`Comic generation failed: ${e.message}`);
             setAppStep('configuration');
         }
     }, [ai, config, characters]);
-    
-    const generateComic = useCallback(async () => {
-        if (!ai) {
-            setError("AI Client not initialized. Please enter a valid API Key.");
-            setAppStep('configuration');
-            return;
-        }
-        setError(null);
-        setAppStep('generation');
-        setComicPanels([]);
-
-        await generateWithImagenModels();
-
-        setProgress({ stage: 'assembly', message: 'Assembling comic...', percentage: 99 });
-        setTimeout(() => {
-            setProgress({ stage: 'done', message: 'Complete!', percentage: 100 });
-            setAppStep('comic');
-        }, 500);
-    }, [ai, config, characters, generateWithImagenModels]);
     
     useEffect(() => {
         if (appStep === 'generation') {
@@ -748,7 +755,7 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
             case 'configuration':
                 return <ConfigurationStep config={config} setConfig={setConfig} onNext={() => setAppStep('characters')} apiKey={apiKey} setApiKey={setApiKey} />;
             case 'characters':
-                return <CharactersStep characters={characters} setCharacters={setCharacters} onBack={() => setAppStep('configuration')} onNext={() => setAppStep('generation')} generateCharacterModelSheet={generateCharacterModelSheet} />;
+                return <CharactersStep characters={characters} setCharacters={setCharacters} onBack={() => setAppStep('configuration')} onNext={() => setAppStep('generation')} generateCharacterModelSheet={generateCharacterModelSheet} config={config} />;
             case 'generation':
                 return <GenerationStep progress={progress} panels={comicPanels} config={config} />;
             case 'comic':
