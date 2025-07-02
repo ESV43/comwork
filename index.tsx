@@ -24,7 +24,7 @@ interface Character {
     description: string;
     referenceImages: { file: File, base64: string }[];
     modelSheetUrl: string | null;
-    modelSheetBase64: string | null; // <-- NEW: For direct API use
+    modelSheetBase64: string | null;
     isGeneratingModelSheet: boolean;
 }
 
@@ -67,18 +67,22 @@ const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-// --- MODEL LISTS (EXPANDED) ---
+// --- MODEL LISTS (EXPANDED & CORRECTED) ---
 const textModels = [
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Most Powerful)' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
+    { id: 'gemini-2.5-flash-lite-preview-06-17', name: 'Gemini 2.5 Flash-Lite Preview' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+    { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash-Lite' },
     { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Powerful)' },
     { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Fast & Balanced)' },
-    { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash' },
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Most Powerful)' },
+    { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash-8B' },
 ];
 
 const imageModels = [
     { id: 'imagen-3.0-generate-002', name: 'Imagen 3 (Best Quality)' },
     { id: 'imagen-4.0-generate-preview-06-06', name: 'Imagen 4 Preview' },
+    { id: 'imagen-4.0-ultra-generate-preview-06-06', name: 'Imagen 4 Ultra Preview' },
     { id: 'gemini-2.0-flash-preview-image-generation', name: 'Gemini 2.0 Flash (Native Image Gen)' },
 ];
 
@@ -625,7 +629,6 @@ const App = () => {
         setError(null);
         
         try {
-             // Correctly create a chat session without the faulty config
             const chat: Chat = ai.chats.create({ model: config.imageModel });
 
             const modelSheetPrompt = `Generate a high-quality, front-facing character portrait to be used as a consistent model sheet for a comic book.
@@ -709,7 +712,6 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
                             panelPromptText += `This is the definitive look for **${char.name}**. \n`;
                             promptParts.push({ inlineData: { mimeType: 'image/png', data: char.modelSheetBase64 }});
                         } else {
-                            // Fallback if no model sheet exists
                             panelPromptText += `Description for **${char.name}**: ${char.description}\n`;
                         }
                     }
