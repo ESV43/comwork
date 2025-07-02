@@ -637,7 +637,8 @@ const App = () => {
         setError(null); // Clear previous errors
 
         try {
-            const chatModel = ai.models.getGenerativeModel({ model: 'gemini-1.5-pro' }); // Use a robust multimodal model for model sheet generation
+            // FIX: Changed ai.models.getGenerativeModel to ai.getGenerativeModel
+            const chatModel = ai.getGenerativeModel({ model: 'gemini-1.5-pro' }); // Use a robust multimodal model for model sheet generation
             const promptParts: Part[] = [];
             
             // Add reference images as inline data if available
