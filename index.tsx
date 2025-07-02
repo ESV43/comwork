@@ -21,7 +21,7 @@ interface Config {
 
 interface Character {
     id: string;
-    name: string;
+    name:string;
     description: string;
     referenceImages: { file: File, base64: string }[];
     modelSheetUrl?: string;
@@ -47,7 +47,7 @@ interface GenerationProgress {
 
 // --- ICONS (as React Components) ---
 const IconSparkles = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C11.45 2 11 2.45 11 3V4.5C11 5.05 11.45 5.5 12 5.5C12.55 5.5 13 5.05 13 4.5V3C13 2.45 12.55 2 12 2ZM6.09 4.67C5.7 4.29 5.07 4.29 4.68 4.67C4.29 5.06 4.29 5.69 4.68 6.08L5.78 7.18C6.17 7.57 6.8 7.57 7.19 7.18C7.58 6.8 7.58 6.17 7.19 5.78L6.09 4.67ZM18.32 4.68C17.93 4.29 17.3 4.29 16.91 4.68L15.81 5.78C15.42 6.17 15.42 6.8 15.81 7.19C16.2 7.58 16.83 7.58 17.22 7.19L18.32 6.09C18.71 5.7 18.71 5.07 18.32 4.68ZM12 6.5C8.96 6.5 6.5 8.96 6.5 12C6.5 15.04 8.96 17.5 12 17.5C15.04 17.5 17.5 15.04 17.5 12C17.5 8.96 15.04 6.5 12 6.5ZM2 12C2 11.45 2.45 11 3 11H4.5C5.05 11 5.5 11.45 5.5 12C5.5 12.55 5.05 13 4.5 13H3C2.45 13 2 12.55 2 12ZM19.5 11H21C21.55 11 22 11.45 22 12C22 12.55 21.55 13 21 13H19.5C18.95 13 18.5 12.55 18.5 12C18.5 11.45 18.95 11 19.5 11ZM6.08 18.32C6.47 18.71 6.47 19.34 6.08 19.73C5.7 20.12 5.07 20.12 4.68 19.73L3.58 18.63C3.19 18.24 3.19 17.61 3.58 17.22C3.97 16.83 4.6 16.83 4.99 17.22L6.08 18.32ZM18.33 18.32L19.43 17.22C19.82 16.83 20.45 16.83 20.84 17.22C21.23 17.61 21.23 18.24 20.84 18.63L19.74 19.73C19.35 20.12 18.72 20.12 18.33 19.73C17.94 19.34 17.94 18.71 18.33 18.32ZM12 18.5C11.45 18.5 11 18.95 11 19.5V21C11 21.55 11.45 22 12 22C12.55 22 13 21.55 13 21V19.5C13 18.95 12.55 18.5 12 18.5Z" /></svg>;
-const IconCog = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61.22l2-3.46c.12-.22-.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" /></svg>;
+const IconCog = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69-.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61.22l2-3.46c.12-.22-.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" /></svg>;
 const IconPeople = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" /></svg>;
 const IconPencil = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>;
 const IconBook = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 4h5v8l-2.5-1.5L6 12V4z" /></svg>;
@@ -297,14 +297,28 @@ Output ONLY the final image. Do not add any text or annotations to the image its
                 contents: [{ role: 'user', parts: promptParts }],
             });
     
-            const imagePart = result.response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+            // **THE FIX: Add robust checking for the response structure.**
+            const response = result.response;
+            if (!response) {
+                 throw new Error("AI returned an empty or invalid response. Please try again.");
+            }
+    
+            if (!response.candidates || response.candidates.length === 0) {
+                const blockReason = response.promptFeedback?.blockReason;
+                if (blockReason) {
+                    throw new Error(`Generation blocked for safety reasons: ${blockReason}. Please modify the character description or images.`);
+                }
+                throw new Error("AI returned no content. The request may have been empty or invalid.");
+            }
+    
+            const imagePart = response.candidates[0]?.content?.parts?.find(p => p.inlineData);
     
             if (imagePart && imagePart.inlineData) {
                 const base64Image = imagePart.inlineData.data;
                 const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${base64Image}`;
                 setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, modelSheetUrl: imageUrl, isGeneratingModelSheet: false } : c));
             } else {
-                throw new Error("AI did not return a valid image for the model sheet. It might have been blocked by safety settings or another issue.");
+                throw new Error("AI did not return a valid image. Please ensure the selected 'Text Generation Model' supports multimodal image output (like Gemini Pro or Flash models).");
             }
     
         } catch (error) {
