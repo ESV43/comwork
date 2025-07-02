@@ -292,9 +292,8 @@ Output ONLY the final image. Do not add any text or annotations to the image its
                 promptParts.push({ inlineData: { mimeType: img.file.type, data: img.base64.split(',')[1] } });
             }
             
-            // Use a powerful multimodal model for this task.
             const result = await ai.models.generateContent({
-                model: 'gemini-1.5-pro',
+                model: config.textModel, // Use the user-selected text model
                 contents: [{ role: 'user', parts: promptParts }],
             });
     
@@ -305,12 +304,16 @@ Output ONLY the final image. Do not add any text or annotations to the image its
                 const imageUrl = `data:${imagePart.inlineData.mimeType};base64,${base64Image}`;
                 setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, modelSheetUrl: imageUrl, isGeneratingModelSheet: false } : c));
             } else {
-                throw new Error("AI did not return a valid image for the model sheet. It might have been blocked by safety settings.");
+                throw new Error("AI did not return a valid image for the model sheet. It might have been blocked by safety settings or another issue.");
             }
     
         } catch (error) {
             console.error("Model sheet generation failed:", error);
-            alert(`Failed to generate model sheet: ${error.message}`);
+            let errorMessage = `Failed to generate model sheet: ${error.message}`;
+            if (error.message && (error.message.includes('"code":429') || error.message.includes('RESOURCE_EXHAUSTED'))) {
+                errorMessage = "Model Sheet generation failed due to API rate limits (Error 429). You may have exceeded your free tier usage for the selected model. Please wait and try again, or consider switching to a different Text Generation Model in the Configuration step.";
+            }
+            alert(errorMessage);
             setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, isGeneratingModelSheet: false } : c));
         }
     };
