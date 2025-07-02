@@ -16,6 +16,7 @@ interface Config {
     seed: string;
     artStyle: string;
     comicEra: string;
+    additionalInstructions: string;
 }
 
 interface Character {
@@ -150,6 +151,16 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
                     value={config.storyScript}
                     onChange={handleInputChange}
                     placeholder="Enter your story script here... Describe the plot, characters, and scenes you want to turn into a comic."
+                />
+            </div>
+             <div className="form-group full-width">
+                <label htmlFor="additionalInstructions">Additional Instructions (Optional)</label>
+                <textarea
+                    id="additionalInstructions"
+                    name="additionalInstructions"
+                    value={config.additionalInstructions}
+                    onChange={handleInputChange}
+                    placeholder="Provide any extra instructions for the AI, e.g., 'All characters should be wearing futuristic armor', 'The mood should be dark and gritty', 'Use a specific color palette'."
                 />
             </div>
             <div className="form-grid">
@@ -557,6 +568,7 @@ const App = () => {
         seed: '',
         artStyle: '',
         comicEra: '',
+        additionalInstructions: '',
     });
 
     const [characters, setCharacters] = useState<Character[]>([]);
@@ -584,7 +596,7 @@ const App = () => {
         setComicPanels([]);
         setProgress({ stage: 'idle', message: 'Waiting to start...', percentage: 0 });
         setError(null);
-        setConfig(prev => ({...prev, storyScript: '', pages: 1, artStyle: '', comicEra: ''}));
+        setConfig(prev => ({...prev, storyScript: '', pages: 1, artStyle: '', comicEra: '', additionalInstructions: ''}));
         setCharacters([]);
     };
 
@@ -597,6 +609,8 @@ const App = () => {
             .filter(c => c.name.trim())
             .map(c => `- ${c.name}: ${c.description || 'No description provided.'}`)
             .join('\n');
+            
+        const additionalInstructionsText = config.additionalInstructions ? `\n\nADDITIONAL INSTRUCTIONS:\n${config.additionalInstructions}` : '';
 
         const systemInstruction = `You are a comic book scriptwriter. Your task is to take a story script and break it down into distinct comic book panels across ${config.pages} page(s).
 Each panel must be assigned a "page" number and a "panel" number (which resets for each page). Each panel must have a "sceneDescription" for the artist and "panelText" for the narrator or dialogue.
@@ -619,7 +633,7 @@ Negative Prompts (what to avoid):
 Output a valid JSON array of objects, where each object represents a panel and has the following structure: { "page": number, "panel": number, "sceneDescription": string, "panelText": string }.
 Ensure the "sceneDescription" is very detailed and visual for the image generation model. Describe characters, setting, actions, and mood.
 Ensure the "panelText" is concise, suitable for a comic book panel. It can be narration or dialogue. If dialogue, prefix with character name (e.g., "HERO: I'll save you!").
-The output must be only the JSON array, without any markdown formatting.`;
+The output must be only the JSON array, without any markdown formatting.${additionalInstructionsText}`;
 
         let parsedPanels: Omit<ComicPanel, 'id' | 'status' | 'imageUrl'>[] = [];
         try {
@@ -674,7 +688,7 @@ Negative Prompts (what to avoid):
 - Avoid disfigured, deformed, or mutated body parts. No amputees unless specified in the script.
 - Avoid extra or missing limbs/fingers.
 - Avoid blurry, noisy, or low-quality images.
-- Avoid text, watermarks, or signatures in the image.`;
+- Avoid text, watermarks, or signatures in the image.${additionalInstructionsText}`;
                 
                 try {
                      const imageResponse = await ai.models.generateImages({
@@ -722,8 +736,10 @@ Negative Prompts (what to avoid):
             .filter(c => c.name.trim())
             .map(c => `- ${c.name}: ${c.description || 'No description provided.'}`)
             .join('\n');
+            
+        const additionalInstructionsText = config.additionalInstructions ? `\n\nADDITIONAL INSTRUCTIONS:\n${config.additionalInstructions}` : '';
 
-        const pageBreakdownPrompt = `You are a screenwriting assistant. Your task is to take a long story script and divide it into a series of smaller, self-contained page summaries for a comic book. The user will specify the total number of pages. You must divide the story's plot points, dialogue, and action evenly and logically across the requested number of pages. For each page, provide a concise but detailed summary of the events, character actions, and key dialogue that should occur on that page. Your output must be a valid JSON array of strings, where each string is the summary for one page. The array must have exactly ${config.pages} elements.`;
+        const pageBreakdownPrompt = `You are a screenwriting assistant. Your task is to take a long story script and divide it into a series of smaller, self-contained page summaries for a comic book. The user will specify the total number of pages. You must divide the story's plot points, dialogue, and action evenly and logically across the requested number of pages. For each page, provide a concise but detailed summary of the events, character actions, and key dialogue that should occur on that page. Your output must be a valid JSON array of strings, where each string is the summary for one page. The array must have exactly ${config.pages} elements.${additionalInstructionsText}`;
 
         let pageSummaries: string[] = [];
 
@@ -795,7 +811,7 @@ Negative Prompts for Images (what to avoid):
 - Avoid blurry, noisy, or low-quality images.
 - Avoid text, watermarks, or signatures in the image.
 
-Repeat this process for all panels needed to tell the story for this page. Do not add any other text, titles, or commentary. Just start with the text for the first panel of this page.`;
+Repeat this process for all panels needed to tell the story for this page. Do not add any other text, titles, or commentary. Just start with the text for the first panel of this page.${additionalInstructionsText}`;
 
             const pagePromptText = `${pageInstructions}
 ---
