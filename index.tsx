@@ -295,7 +295,7 @@ The model sheet should show the character's face and upper body clearly from the
             
             // **THE FIX**: Use a specific, highly capable multimodal model and a strong system instruction.
             const result = await ai.models.generateContent({
-                model: 'gemini-1.5-pro',
+                model: 'gemini-2.5-flash',
                 contents: [{ role: 'user', parts: promptParts }],
                 config: { systemInstruction: modelSheetSystemInstruction }
             });
