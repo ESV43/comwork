@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { GoogleGenAI, GenerateContentResponse, Chat, Part } from "@google/genai";
 import jsPDF from 'jspdf';
@@ -410,52 +410,71 @@ const GenerationStep = ({ progress, panels, config }) => {
 };
 
 const ComicViewStep = ({ panels, config, onRestart }) => {
+    const comicDownloadAreaRef = useRef<HTMLDivElement>(null);
     const [showDescriptions, setShowDescriptions] = useState(true);
     const [isDownloading, setIsDownloading] = useState(false);
 
     const downloadComic = async () => {
-        setIsDownloading(true);
-        const pageElements = document.querySelectorAll('.comic-page-container');
-        if (pageElements.length === 0) {
-            alert("No pages found to download.");
-            setIsDownloading(false);
+        if (!comicDownloadAreaRef.current) {
+            alert("Comic content not found. Cannot download.");
             return;
         }
 
-        const pdf = new jsPDF({
-            orientation: 'p',
-            unit: 'px',
-            format: 'a4',
-        });
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
+        setIsDownloading(true);
 
-        const pageBackgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--container-bg').trim();
-
-        for (let i = 0; i < pageElements.length; i++) {
-            const pageElement = pageElements[i] as HTMLElement;
-            const canvas = await html2canvas(pageElement, {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: pageBackgroundColor,
+        try {
+            // 1. Wait for all images to load to prevent blank images in PDF
+            const images = Array.from(comicDownloadAreaRef.current.querySelectorAll('img'));
+            const imageLoadPromises = images.map(img => {
+                if (img.complete) return Promise.resolve();
+                return new Promise<void>((resolve, reject) => {
+                    img.onload = () => resolve();
+                    img.onerror = reject;
+                });
             });
 
-            const imgData = canvas.toDataURL('image/png');
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
-            const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-
-            const imgX = (pdfWidth - imgWidth * ratio) / 2;
-            const imgY = 0;
+            await Promise.all(imageLoadPromises);
             
-            if (i > 0) {
-                pdf.addPage();
+            // 2. Proceed with PDF generation
+            const pageElements = comicDownloadAreaRef.current.querySelectorAll('.comic-page-container');
+            if (pageElements.length === 0) {
+                alert("No pages found to download.");
+                return;
             }
-            pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth * ratio, imgHeight * ratio);
+
+            const pdf = new jsPDF({ orientation: 'p', unit: 'px', format: 'a4' });
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const pageBackgroundColor = getComputedStyle(document.documentElement).getPropertyValue('--container-bg').trim() || '#1A1A3A';
+
+            for (let i = 0; i < pageElements.length; i++) {
+                const pageElement = pageElements[i] as HTMLElement;
+                const canvas = await html2canvas(pageElement, {
+                    scale: 2,
+                    useCORS: true,
+                    allowTaint: true,
+                    backgroundColor: pageBackgroundColor,
+                });
+
+                const imgData = canvas.toDataURL('image/png');
+                const imgProps = pdf.getImageProperties(imgData);
+                const ratio = Math.min(pdfWidth / imgProps.width, pdfHeight / imgProps.height);
+                const imgWidth = imgProps.width * ratio;
+                const imgHeight = imgProps.height * ratio;
+                const imgX = (pdfWidth - imgWidth) / 2;
+                const imgY = 0;
+                
+                if (i > 0) pdf.addPage();
+                pdf.addImage(imgData, 'PNG', imgX, imgY, imgWidth, imgHeight);
+            }
+            
+            pdf.save('ai-comic.pdf');
+        } catch (error) {
+            console.error("Failed to generate PDF:", error);
+            alert("An error occurred while generating the PDF. Please check the console for details.");
+        } finally {
+            setIsDownloading(false);
         }
-        
-        pdf.save('ai-comic.pdf');
-        setIsDownloading(false);
     };
     
     const successfulPanels = useMemo(() => panels.filter(p => p.status === 'done' && p.imageUrl).length, [panels]);
@@ -497,7 +516,7 @@ const ComicViewStep = ({ panels, config, onRestart }) => {
                 </div>
             </div>
             
-            <div id="comic-download-area">
+            <div id="comic-download-area" ref={comicDownloadAreaRef}>
                 {Object.keys(pages).sort((a,b) => parseInt(a) - parseInt(b)).map(pageNum => (
                     <div key={`page-container-${pageNum}`} className="comic-page-container">
                         <h3 className="page-header">Page {pageNum}</h3>
