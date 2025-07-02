@@ -24,6 +24,7 @@ interface Character {
     description: string;
     referenceImages: { file: File, base64: string }[];
     modelSheetUrl: string | null;
+    modelSheetBase64: string | null; // <-- NEW: For direct API use
     isGeneratingModelSheet: boolean;
 }
 
@@ -241,7 +242,7 @@ const ConfigurationStep = ({ config, setConfig, onNext, apiKey, setApiKey }) => 
 const CharactersStep = ({ characters, setCharacters, onBack, onNext, generateCharacterModelSheet, config }) => {
 
     const addCharacter = () => {
-        setCharacters(prev => [...prev, { id: Date.now().toString(), name: '', description: '', referenceImages: [], modelSheetUrl: null, isGeneratingModelSheet: false }]);
+        setCharacters(prev => [...prev, { id: Date.now().toString(), name: '', description: '', referenceImages: [], modelSheetUrl: null, modelSheetBase64: null, isGeneratingModelSheet: false }]);
     };
     
     const updateCharacter = (id: string, field: keyof Character, value: any) => {
@@ -615,9 +616,8 @@ const App = () => {
         const character = characters.find(c => c.id === characterId);
         if (!character || character.referenceImages.length === 0 || !ai) return;
 
-        // Ensure the correct model is selected for this feature
         if (config.imageModel !== 'gemini-2.0-flash-preview-image-generation') {
-            setError("Model Sheet generation is only supported with the 'Gemini 2.0 Flash (Native Image Gen)' model.");
+            setError("Model Sheet generation is only supported with the 'Gemini 2.0 Flash (Native Image Gen)' model. Please select it in the Configuration step.");
             return;
         }
 
@@ -625,7 +625,8 @@ const App = () => {
         setError(null);
         
         try {
-            const chat: Chat = ai.chats.create({ model: config.imageModel, history: [] });
+             // Correctly create a chat session without the faulty config
+            const chat: Chat = ai.chats.create({ model: config.imageModel });
 
             const modelSheetPrompt = `Generate a high-quality, front-facing character portrait to be used as a consistent model sheet for a comic book.
 Character Name: ${character.name}
@@ -643,14 +644,17 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
             const generatedPart = result.candidates?.[0]?.content?.parts.find(p => p.inlineData);
 
             if (generatedPart?.inlineData) {
-                const imageUrl = `data:${generatedPart.inlineData.mimeType};base64,${generatedPart.inlineData.data}`;
-                setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, modelSheetUrl: imageUrl, isGeneratingModelSheet: false } : c));
+                const mimeType = generatedPart.inlineData.mimeType;
+                const data = generatedPart.inlineData.data;
+                const imageUrl = `data:${mimeType};base64,${data}`;
+                setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, modelSheetUrl: imageUrl, modelSheetBase64: data, isGeneratingModelSheet: false } : c));
             } else {
                 throw new Error("Model sheet generation failed to return an image.");
             }
         } catch(e) {
             console.error(e);
-            setError(`Failed to generate model sheet for ${character.name}: ${e.message}`);
+            const errorMessage = e.response?.data?.error?.message || e.message;
+            setError(`Failed to generate model sheet for ${character.name}: ${errorMessage}`);
             setCharacters(prev => prev.map(c => c.id === characterId ? { ...c, isGeneratingModelSheet: false } : c));
         }
     }, [ai, characters, config.artStyle, config.comicEra, config.imageModel]);
@@ -665,7 +669,6 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
         setAppStep('generation');
         setComicPanels([]);
         
-        // Main generation logic using the model sheet approach
         setProgress({ stage: 'story', message: 'Analyzing story script...', percentage: 0 });
         
         const systemInstruction = `You are a comic book scriptwriter. Your task is to take a story script and break it down into distinct comic book panels across ${config.pages} page(s). Each panel needs a "page" and "panel" number, a "sceneDescription", and "panelText". IMPORTANT: In the sceneDescription, use character's full names, not pronouns (e.g., "Batman punches Joker", not "He punches him"). This is critical. Output a valid JSON array of panel objects only.`;
@@ -687,7 +690,7 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
 
             setProgress({ stage: 'images', message: 'Generating panel images...', percentage: 20 });
             
-            const chat: Chat = ai.chats.create({ model: config.imageModel, history: [] });
+            const chat: Chat = ai.chats.create({ model: config.imageModel });
 
             for (let i = 0; i < initialPanels.length; i++) {
                 const panel = initialPanels[i];
@@ -697,16 +700,18 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
                 const promptParts: Part[] = [];
                 let panelPromptText = `Generate a comic book panel. **Scene**: ${panel.sceneDescription}\n`;
                 
-                const charactersInPanel = characters.filter(char => char.name && panel.sceneDescription.includes(char.name) && char.modelSheetUrl);
+                const charactersInPanel = characters.filter(char => char.name && panel.sceneDescription.includes(char.name));
 
                 if (charactersInPanel.length > 0) {
-                    panelPromptText += `**Character References**: Use the following model sheets to draw the characters. Match them perfectly.\n`;
+                    panelPromptText += `**Character References**: You MUST use the following model sheets to draw the characters. Match them perfectly.\n`;
                     for(const char of charactersInPanel) {
-                        panelPromptText += `This is the definitive look for **${char.name}**. \n`;
-                        const response = await fetch(char.modelSheetUrl);
-                        const blob = await response.blob();
-                        const base64 = await fileToBase64(new File([blob], "ref.png", {type: blob.type}));
-                        promptParts.push({ inlineData: { mimeType: blob.type, data: base64.split(',')[1] }});
+                        if (char.modelSheetBase64) {
+                            panelPromptText += `This is the definitive look for **${char.name}**. \n`;
+                            promptParts.push({ inlineData: { mimeType: 'image/png', data: char.modelSheetBase64 }});
+                        } else {
+                            // Fallback if no model sheet exists
+                            panelPromptText += `Description for **${char.name}**: ${char.description}\n`;
+                        }
                     }
                 }
 
@@ -739,7 +744,8 @@ Art Style: ${config.artStyle}, ${config.comicEra} style.`;
 
         } catch (e) {
             console.error("Comic generation failed:", e);
-            setError(`Comic generation failed: ${e.message}`);
+            const errorMessage = e.response?.data?.error?.message || e.message;
+            setError(`Comic generation failed: ${errorMessage}`);
             setAppStep('configuration');
         }
     }, [ai, config, characters]);
